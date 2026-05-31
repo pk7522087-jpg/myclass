@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏆 小9班經紀人連線養成系統 v5.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        kpop: { light: '#ff8bb6', DEFAULT: '#ec4899', dark: '#be185d', glow: '#f43f5e' },
+                        hoop: { light: '#f97316', DEFAULT: '#ea580c', dark: '#9a3412', glow: '#f97316' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Rajdhani', sans-serif;
+            background-color: #030712;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(236, 72, 153, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(234, 88, 12, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+        .neon-border-kpop { box-shadow: 0 0 15px rgba(236, 72, 153, 0.4); border: 1px solid rgba(236, 72, 153, 0.6); }
+        .neon-border-hoop { box-shadow: 0 0 15px rgba(234, 88, 12, 0.4); border: 1px solid rgba(234, 88, 12, 0.6); }
+        .text-glow-kpop { text-shadow: 0 0 8px rgba(236, 72, 153, 0.6); }
+        .text-glow-hoop { text-shadow: 0 0 8px rgba(234, 88, 12, 0.6); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .medal-locked { filter: grayscale(100%) opacity(25%); transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .medal-unlocked { filter: grayscale(0%) opacity(100%) drop-shadow(0 0 8px rgba(245, 158, 11, 0.7)); animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { 0% { transform: scale(0.4); } 70% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        .slogan-marquee { display: inline-block; white-space: nowrap; animation: marquee 10s linear infinite; }
+        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col justify-between pb-8 overflow-x-hidden">
+
+    <canvas id="effectCanvas" class="fixed inset-0 pointer-events-none z-50"></canvas>
+
+    <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-gradient-to-tr from-pink-500 to-orange-500 p-2.5 rounded-xl shadow-lg shadow-pink-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-pink-400 via-amber-300 to-orange-400">
+                        小9班經紀人連線系統 <span id="identityBadge" class="text-xs bg-slate-800 px-2 py-0.5 rounded text-white ml-2">載入中...</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 font-medium">即時雲端同步 ✦ 跨裝置小組專屬平板操控</p>
+                </div>
+            </div>
+
+            <div id="teacherHeaderActions" class="flex flex-wrap items-center gap-2 hidden">
+                <button onclick="triggerResetConfirm()" class="bg-slate-800/80 hover:bg-red-950/60 border border-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg text-slate-300 hover:text-red-300 transition">🔄 重置系統</button>
+                <button onclick="toggleTeacherConsole()" class="bg-gradient-to-r from-pink-600 to-orange-600 text-white font-bold px-4 py-1.5 rounded-lg text-xs transition shadow-md">⚙️ 教師主控台</button>
+            </div>
+        </div>
+    </header>
+
+    <section class="max-w-7xl mx-auto px-4 mt-4 w-full">
+        <div class="bg-slate-900/60 border border-purple-900/40 rounded-2xl p-4 shadow-xl relative overflow-hidden">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">🤝</span>
+                    <div>
+                        <h2 class="text-sm font-black text-purple-300">小9班共榮應援里程碑 <span class="text-[10px] text-slate-400 font-normal">(點擊星級看大獎)</span></h2>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs text-purple-300 font-bold">全班總能量：<span id="classMilestoneValue" class="text-sm text-yellow-300 font-black">0</span> 分</span>
+                </div>
+            </div>
+            <div class="relative w-full h-8 flex items-center mt-6 mb-2">
+                <div class="absolute inset-x-0 h-2 bg-slate-950 rounded-full border border-purple-950"></div>
+                <div id="classMilestoneBar" class="absolute left-0 h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-orange-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                <div class="absolute inset-x-0 flex justify-between px-4">
+                    <button onclick="showTierRewardModal(1)" class="group -translate-y-2.5 flex flex-col items-center">
+                        <div id="starNode1" class="w-7 h-7 rounded-full bg-slate-950 border-2 border-slate-700 flex items-center justify-center text-sm shadow">🌟</div>
+                        <span class="text-[9px] text-slate-400 mt-1 font-bold" id="starLabel1">第一階段</span>
+                    </button>
+                    <button onclick="showTierRewardModal(2)" class="group -translate-y-2.5 flex flex-col items-center">
+                        <div id="starNode2" class="w-7 h-7 rounded-full bg-slate-950 border-2 border-slate-700 flex items-center justify-center text-sm shadow">🌟</div>
+                        <span class="text-[9px] text-slate-400 mt-1 font-bold" id="starLabel2">第二階段</span>
+                    </button>
+                    <button onclick="showTierRewardModal(3)" class="group -translate-y-2.5 flex flex-col items-center">
+                        <div id="starNode3" class="w-7 h-7 rounded-full bg-slate-950 border-2 border-slate-700 flex items-center justify-center text-sm shadow">👑</div>
+                        <span class="text-[9px] text-slate-400 mt-1 font-bold" id="starLabel3">第三階段</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 w-full flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section id="left看板區" class="lg:col-span-8 flex flex-col gap-6">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs px-2.5 py-1 rounded-full font-bold">⚡ 當前培訓大對決</span>
+                    <span id="matchStatusBadge" class="text-xs px-2 py-0.5 rounded-md font-semibold bg-emerald-500/20 text-emerald-400">應援募集中</span>
+                </div>
+                <div class="grid grid-cols-11 items-center gap-2 py-2">
+                    <div class="col-span-5 text-center p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <span class="text-4xl block mb-2" id="matchOpponentAEmoji">🔴</span>
+                        <h3 class="font-bold text-lg text-slate-100 truncate" id="matchOpponentAName">第一組</h3>
+                        <p class="text-xs text-slate-400 mt-1">目前總助力：<span class="font-bold text-indigo-400" id="totalCheerPointsA">0</span> 分</p>
+                    </div>
+                    <div class="col-span-1 text-center"><span class="text-2xl font-black italic text-pink-500">VS</span></div>
+                    <div class="col-span-5 text-center p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <span class="text-4xl block mb-2" id="matchOpponentBEmoji">🔵</span>
+                        <h3 class="font-bold text-lg text-slate-100 truncate" id="matchOpponentBName">第三組</h3>
+                        <p class="text-xs text-slate-400 mt-1">目前總助力：<span class="font-bold text-indigo-400" id="totalCheerPointsB">0</span> 分</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="flex justify-between text-xs text-slate-400 mb-1.5 font-semibold">
+                        <span id="ratioTextA">50% 支持度</span><span>助力比例</span><span id="ratioTextB">50% 支持度</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
+                        <div id="ratioBarA" class="bg-gradient-to-r from-pink-500 to-indigo-500 h-full transition-all duration-500" style="width: 50%"></div>
+                        <div id="ratioBarB" class="bg-gradient-to-r from-sky-400 to-orange-500 h-full transition-all duration-500" style="width: 50%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h2 class="text-lg font-bold text-slate-200 mb-4">👥 各組養成經紀人看板</h2>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4" id="teamsContainer"></div>
+            </div>
+        </section>
+
+        <section id="right操作區" class="lg:col-span-4 flex flex-col gap-6">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sticky top-24">
+                <div class="flex border-b border-slate-800 mb-4">
+                    <button onclick="switchTab('cheer')" id="tabCheerBtn" class="flex-1 pb-2 text-center text-xs font-black text-pink-400 border-b-2 border-pink-500">📣 賽事應援</button>
+                    <button onclick="switchTab('gift')" id="tabGiftBtn" class="flex-1 pb-2 text-center text-xs font-black text-slate-400 border-b-2 border-transparent">🤝 暖心互助</button>
+                </div>
+
+                <form id="cheerForm" onsubmit="handleCheerSubmit(event)" class="space-y-4">
+                    <div id="teamStaticDisplay" class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-sm font-bold text-slate-300">
+                        操作身分：<span id="myTeamLabel" class="text-pink-400">載入中...</span>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 mb-1.5">1. 應援支持對象</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="supportOpponent" value="A" checked class="peer sr-only">
+                                <div class="p-3 text-center rounded-xl bg-slate-950 border border-slate-800 peer-checked:border-pink-500 peer-checked:bg-pink-500/10 text-xs font-bold text-slate-300">
+                                    <span class="block text-lg mb-1" id="formOpponentAEmoji">🔴</span><span id="formOpponentAName" class="truncate block">紅隊</span>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="supportOpponent" value="B" class="peer sr-only">
+                                <div class="p-3 text-center rounded-xl bg-slate-950 border border-slate-800 peer-checked:border-orange-500 peer-checked:bg-orange-500/10 text-xs font-bold text-slate-300">
+                                    <span class="block text-lg mb-1" id="formOpponentBEmoji">🔵</span><span id="formOpponentBName" class="truncate block">藍隊</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1.5">
+                            <label class="text-xs font-bold text-slate-400">2. 投入分數數量</label>
+                            <span class="text-xs text-slate-400">可用：<span id="formAvailablePoints" class="font-bold text-indigo-400">0</span> 分</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex gap-2 items-center">
+                                <input type="range" id="cheerPointsRange" min="10" max="500" value="10" oninput="syncPointsInput('range')" class="flex-grow accent-pink-500 bg-slate-950 h-2 rounded-lg">
+                                <input type="number" id="cheerPointsInput" min="1" max="500" value="10" oninput="syncPointsInput('input')" class="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-center font-bold text-sm text-slate-100">
+                            </div>
+                            <div class="flex justify-between text-[10px] text-slate-500">
+                                <span>最少 1</span><span class="text-amber-500 font-semibold">⚠️ 上限 50%</span><span id="limitMax">最多 500</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 mb-1.5">3. 使用特珠助力券</label>
+                        <div class="grid grid-cols-3 gap-1.5" id="ticketSelectionContainer"></div>
+                    </div>
+                    <button type="submit" class="w-full bg-gradient-to-r from-pink-500 to-orange-500 text-slate-950 font-black py-3 rounded-xl shadow-lg text-sm">✨ 送出預測應援</button>
+                </form>
+
+                <form id="giftForm" onsubmit="handleGiftSubmit(event)" class="space-y-4 hidden">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 mb-1.5">1. 接受贈予的組別</label>
+                        <select id="selectGiftToTeam" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200"></select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-400 mb-1.5">2. 贈送分數</label>
+                            <input type="number" id="giftPointsInput" value="50" min="0" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-bold text-purple-400">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-400 mb-1.5">3. 轉贈道具券</label>
+                            <select id="selectGiftTicket" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300">
+                                <option value="none">🚫 不轉贈</option>
+                                <option value="double">🚀 雙倍券 (1張)</option>
+                                <option value="insurance">🛡️ 保險券 (1張)</option>
+                                <option value="encore">📣 安可券 (1張)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black py-3 rounded-xl text-sm">💝 傳遞溫暖．確認贈送</button>
+                </form>
+
+                <div class="mt-5 pt-5 border-t border-slate-800">
+                    <h3 class="text-xs font-bold text-slate-400 mb-2">已參與本場應援的組別：</h3>
+                    <div id="activeCheerList" class="space-y-1.5 max-h-32 overflow-y-auto no-scrollbar"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="max-w-7xl mx-auto px-4 w-full">
+        <div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-4">
+            <p class="text-xs font-bold text-slate-400 mb-2">📋 應援養成紀錄日誌</p>
+            <div id="historyLog" class="h-24 overflow-y-auto font-mono text-xs text-slate-400 space-y-1.5 pr-2"></div>
+        </div>
+    </footer>
+
+    <div id="teacherConsoleModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+            <div class="p-5 border-b border-slate-800 flex justify-between items-center">
+                <div><h2 class="font-black text-lg text-slate-100">⚙️ 老師專屬賽事主控台</h2></div>
+                <button onclick="toggleTeacherConsole()" class="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6 flex-grow no-scrollbar">
+                <div class="space-y-3 p-4 bg-slate-950/50 rounded-xl border border-slate-800">
+                    <h3 class="text-sm font-bold text-indigo-400">🏆 賽事組別與對戰設定</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] text-pink-400">🔥 參賽方 A</label>
+                            <select id="selectOpponentATeam" onchange="handleOpponentSelect('A')" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200"></select>
+                            <input type="text" id="setupOpponentA" class="w-full bg-slate-900 border border-slate-700 rounded mt-1 p-1.5 text-xs text-slate-200">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-orange-400">🏀 參賽方 B</label>
+                            <select id="selectOpponentBTeam" onchange="handleOpponentSelect('B')" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200"></select>
+                            <input type="text" id="setupOpponentB" class="w-full bg-slate-900 border border-slate-700 rounded mt-1 p-1.5 text-xs text-slate-200">
+                        </div>
+                    </div>
+                    <div class="flex gap-2 items-center pt-2">
+                        <span class="text-xs text-slate-400">獲勝額外獎勵分數：</span>
+                        <input type="number" id="victoryBonusPoints" class="w-20 bg-slate-900 border border-slate-700 rounded p-1 text-xs text-center text-slate-200">
+                    </div>
+                    <button onclick="updateMatchSetup()" class="w-full bg-indigo-600 hover:bg-indigo-500 font-bold py-2 rounded text-xs transition">⚡ 更新賽事對戰 (將重設目前應援)</button>
+                </div>
+                <div class="space-y-3 p-4 bg-slate-950/50 rounded-xl border border-slate-800">
+                    <h3 class="text-sm font-bold text-emerald-400">🏁 賽事結果判定</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="resolveCurrentMatch('A')" class="bg-pink-900 hover:bg-pink-800 border border-pink-700 font-bold py-3 rounded-xl text-xs flex flex-col items-center">🏆 <span id="resolveTextA">判定A勝</span></button>
+                        <button onclick="resolveCurrentMatch('B')" class="bg-orange-900 hover:bg-orange-800 border border-orange-700 font-bold py-3 rounded-xl text-xs flex flex-col items-center">🏆 <span id="resolveTextB">判定B勝</span></button>
+                    </div>
+                    <button onclick="refundAllActiveCheers()" class="w-full text-center text-xs text-slate-400 underline">賽事取消 / 退還全數分數</button>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-slate-300 mb-2">📋 各組別詳細分數與道具管理</h3>
+                    <div id="teacherTeamList" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tierModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[100] flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-6 text-center shadow-2xl">
+            <span id="tierModalStar" class="text-5xl block mb-3">⭐</span>
+            <h3 id="tierModalTitle" class="text-lg font-black text-purple-300 mb-1">階段里程碑</h3>
+            <p id="tierModalTarget" class="text-xs font-mono text-slate-400 mb-4">解鎖分數：0 分</p>
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 mb-6">
+                <p id="tierModalReward" class="text-sm font-black text-slate-100">獎勵內容</p>
+            </div>
+            <button onclick="closeTierModal()" class="w-full bg-gradient-to-r from-pink-500 to-orange-500 text-slate-950 font-black py-2 rounded-xl text-xs">我知道了</button>
+        </div>
+    </div>
+
+    <div id="customModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[100] flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 text-center shadow-2xl">
+            <span id="customModalEmoji" class="text-5xl block mb-3">💡</span>
+            <h3 id="customModalTitle" class="text-lg font-bold text-slate-100 mb-2">標題</h3>
+            <div id="customModalMessage" class="text-sm text-slate-400 mb-6 text-left">內容</div>
+            <div class="flex justify-center gap-3" id="customModalButtons"></div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+    <script>
+        // ⚠️ 請在此處貼上您的 Firebase 配置代碼
+        const firebaseConfig = {
+  apiKey: "AIzaSyBxflX297GPOGKc6xUNvanSTTzPKax1GVQ",
+  authDomain: "my-class-system.firebaseapp.com",
+  projectId: "my-class-system",
+  storageBucket: "my-class-system.firebasestorage.app",
+  messagingSenderId: "109679170420",
+  appId: "1:109679170420:web:ba78854ea97b44ec3dd221",
+  measurementId: "G-E8GX5BZXLG"
+};
+
+        // 初始化 Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // 分析目前網頁的身分參數
+        const urlParams = new URLSearchParams(window.location.search);
+        const myTeamId = parseInt(urlParams.get('team')) || null; // 學生組別 (1~5)
+        const currentRole = urlParams.get('role'); // 'screen' 或 'teacher'
+
+        let state = {};
+
+        // 音效系統
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                if (type === 'cheer') {
+                    osc.type = 'triangle'; osc.frequency.setValueAtTime(330, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(660, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+                } else if (type === 'success') {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(523, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(659, audioCtx.currentTime + 0.1);
+                    osc.frequency.setValueAtTime(783, audioCtx.currentTime + 0.2);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+                }
+            } catch(e){}
+        }
+
+        // 畫布特效
+        const canvas = document.getElementById('effectCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resizeCanvas); resizeCanvas();
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y; this.color = color; this.radius = Math.random() * 3 + 2;
+                this.vx = (Math.random() - 0.5) * 6; this.vy = (Math.random() - 0.5) * 6 - 3;
+                this.alpha = 1; this.gravity = 0.15;
+            }
+            update() { this.x += this.vx; this.y += this.vy; this.vy += this.gravity; this.alpha -= 0.02; }
+            draw() {
+                ctx.save(); ctx.globalAlpha = this.alpha; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+                ctx.fillStyle = this.color; ctx.fill(); ctx.restore();
+            }
+        }
+        function createExplosion(x, y, isKpop = true) {
+            const colors = isKpop ? ['#ff8bb6', '#ec4899', '#f43f5e', '#ffffff'] : ['#f97316', '#ea580c', '#f59e0b', '#ffffff'];
+            for (let i = 0; i < 30; i++) particles.push(new Particle(x, y, colors[Math.floor(Math.random() * colors.length)]));
+        }
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles = particles.filter(p => p.alpha > 0);
+            particles.forEach(p => { p.update(); p.draw(); });
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+        // 預設核心初始化架構
+        const defaultState = {
+            teams: [
+                { id: 1, name: "第一組", emoji: "🎵", points: 1000, xp: 0, level: 1, type: "kpop", slogan: "節奏不停，舞台不熄！", tickets: { double: 1, insurance: 1, encore: 1 } },
+                { id: 2, name: "第二組", emoji: "✨", points: 1000, xp: 0, level: 1, type: "kpop", slogan: "閃耀星光，由我引領！", tickets: { double: 1, insurance: 1, encore: 1 } },
+                { id: 3, name: "第三組", emoji: "🏀", points: 1000, xp: 0, level: 1, type: "hoop", slogan: "熱血灌籃，制霸全場！", tickets: { double: 1, insurance: 1, encore: 1 } },
+                { id: 4, name: "第四組", emoji: "🔥", points: 1000, xp: 0, level: 1, type: "hoop", slogan: "無畏逆境，火力全開！", tickets: { double: 1, insurance: 1, encore: 1 } },
+                { id: 5, name: "第五組", emoji: "👑", points: 1000, xp: 0, level: 1, type: "hoop", slogan: "稱霸巔峰，捨我其誰！", tickets: { double: 1, insurance: 1, encore: 1 } }
+            ],
+            match: {
+                opponentA: { type: 'team', id: 1, customName: "🔴 第一組" },
+                opponentB: { type: 'team', id: 3, customName: "🔵 第三組" },
+                victoryBonus: 200, activeCheers: []
+            },
+            milestones: {
+                target1: 6000, reward1: "全班有氧熱舞大賽 & 特製點心同樂會 🍩",
+                target2: 12000, reward2: "星光達人爭霸賽 & 露天爆米花星空影院 🎬",
+                target3: 20000, reward3: "👑 養成終極慶典：兩天一夜瘋狂經紀人嘉年華之旅 🚌"
+            },
+            medals: [
+                { id: "lvl5", title: "金牌王牌經紀人", desc: "任一小組等級提升至 Lv.5", icon: "👑" },
+                { id: "rich", title: "富甲一方巨頭", desc: "任一小組分數突破 2,000 分", icon: "💰" },
+                { id: "kind", title: "暖心天使勳章", desc: "執行一次無私的暖心互助轉贈", icon: "💝" },
+                { id: "win3", title: "不敗神話推手", desc: "成功預測並贏得 3 次賽事應援", icon: "🔥" }
+            ],
+            history: ["系統即時雲端聯通建立完成。"],
+            stats: { totalPredictedWins: {} },
+            triggerTrigger: 0 // 用於同步播放爆炸粒子特效的電磁波計數器
+        };
+
+        // 介面權限分配隱藏
+        function adjustInterfaceByRole() {
+            if (currentRole === 'screen') {
+                document.getElementById('right操作區').classList.add('hidden');
+                document.getElementById('left看板區').classList.remove('lg:col-span-8');
+                document.getElementById('left看板區').classList.add('lg:col-span-12');
+                document.getElementById('identityBadge').innerText = "🖥️ 大螢幕主看板";
+            } else if (currentRole === 'teacher') {
+                document.getElementById('teacherHeaderActions').classList.remove('hidden');
+                document.getElementById('right操作區').classList.add('hidden');
+                document.getElementById('left看板區').classList.remove('lg:col-span-8');
+                document.getElementById('left看板區').classList.add('lg:col-span-12');
+                document.getElementById('identityBadge').innerText = "👩‍🏫 老師主控台端";
+            } else if (myTeamId >= 1 && myTeamId <= 5) {
+                document.getElementById('identityBadge').innerText = `📱 第 ${myTeamId} 組學生平板`;
+            } else {
+                // 沒有帶參數，提示引導
+                document.body.innerHTML = `
+                    <div class="max-w-md mx-auto mt-20 p-6 bg-slate-900 border border-slate-800 rounded-2xl text-center">
+                        <h2 class="text-xl font-bold text-yellow-400 mb-4">歡迎使用小9班網路分散式連線系統</h2>
+                        <p class="text-xs text-slate-400 mb-6">請為不同的設備後面加上對應的網址參數：</p>
+                        <div class="space-y-2 text-left text-xs text-slate-300 font-mono">
+                            <p class="bg-slate-950 p-2 rounded"><b>大螢幕：</b> 檔名.html?role=screen</p>
+                            <p class="bg-slate-950 p-2 rounded"><b>老師端：</b> 檔名.html?role=teacher</p>
+                            <p class="bg-slate-950 p-2 rounded"><b>第一組平板：</b> 檔名.html?team=1</p>
+                            <p class="bg-slate-950 p-2 rounded"><b>第二組平板：</b> 檔名.html?team=2</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Firebase 監聽：只要雲端資料一改變，所有螢幕一起重繪
+        db.ref('system_state').on('value', snapshot => {
+            const data = snapshot.val();
+            if (!data) {
+                // 資料庫是空的，初始化寫入預設資料
+                db.ref('system_state').set(defaultState);
+                state = defaultState;
+            } else {
+                // 檢查是否需要在大螢幕播放爆炸動畫
+                if (state && data.triggerTrigger !== state.triggerTrigger) {
+                    playSound('success');
+                    createExplosion(window.innerWidth / 2, window.innerHeight / 3, true);
+                    createExplosion(window.innerWidth / 4, window.innerHeight / 2, false);
+                }
+                state = data;
+            }
+            renderApp();
+        });
+
+        function saveStateToCloud() {
+            db.ref('system_state').set(state);
+        }
+
+        function renderApp() {
+            if (!state.teams) return;
+            renderTeams();
+            renderMatchArea();
+            renderActiveCheers();
+            renderHistory();
+            updateFormStates();
+        }
+
+        function renderTeams() {
+            const container = document.getElementById('teamsContainer');
+            container.innerHTML = '';
+            state.teams.forEach(team => {
+                const borderClass = team.type === 'kpop' ? 'neon-border-kpop' : 'neon-border-hoop';
+                const badgeColor = team.type === 'kpop' ? 'bg-pink-500' : 'bg-orange-500';
+
+                let medalsHtml = '';
+                // 簡易成就展示
+                state.medals.forEach(m => {
+                    let isRelevant = false;
+                    if (m.id === 'lvl5' && team.level >= 5) isRelevant = true;
+                    if (m.id === 'rich' && team.points >= 2000) isRelevant = true;
+                    if (m.id === 'kind' && state.history.some(log => log.includes(`[${team.name}]`) && log.includes("💝"))) isRelevant = true;
+                    if (m.id === 'win3' && state.stats.totalPredictedWins && state.stats.totalPredictedWins[team.id] >= 3) isRelevant = true;
+
+                    medalsHtml += `<span class="text-sm ${isRelevant?'medal-unlocked':'medal-locked'}" title="${m.title}">${m.icon}</span>`;
+                });
+
+                container.innerHTML += `
+                    <div class="bg-slate-950/80 border ${borderClass} rounded-2xl p-4 flex flex-col justify-between transition ${myTeamId===team.id?'ring-4 ring-indigo-500':''}">
+                        <div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xl">${team.emoji}</span>
+                                <span class="${badgeColor} text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full">Lv.${team.level}</span>
+                            </div>
+                            <h3 class="font-bold text-xs text-slate-100 truncate mt-1">${team.name}</h3>
+                            <div class="bg-slate-900/60 rounded px-1.5 py-0.5 my-1.5 overflow-hidden text-[9px] text-slate-400 font-medium">
+                                <div class="slogan-marquee">${team.slogan}</div>
+                            </div>
+                            <div class="bg-slate-900/40 p-1.5 rounded border border-slate-900 text-[11px] flex justify-between">
+                                <span class="text-slate-400">分數</span><span class="font-bold text-yellow-400">${team.points}</span>
+                            </div>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-slate-900 space-y-1">
+                            <div class="grid grid-cols-3 gap-0.5 text-center text-[9px] text-slate-400">
+                                <div class="bg-slate-900 p-0.5 rounded">🚀${team.tickets.double}</div>
+                                <div class="bg-slate-900 p-0.5 rounded">🛡️${team.tickets.insurance}</div>
+                                <div class="bg-slate-900 p-0.5 rounded">📣${team.tickets.encore}</div>
+                            </div>
+                            <div class="flex justify-center gap-1 pt-1">${medalsHtml}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function renderMatchArea() {
+            let nameA = state.match.opponentA.customName;
+            if (state.match.opponentA.type === 'team') { const t = state.teams.find(x => x.id === state.match.opponentA.id); if (t) nameA = t.name; }
+            let nameB = state.match.opponentB.customName;
+            if (state.match.opponentB.type === 'team') { const t = state.teams.find(x => x.id === state.match.opponentB.id); if (t) nameB = t.name; }
+
+            document.getElementById('matchOpponentAName').innerText = nameA;
+            document.getElementById('matchOpponentBName').innerText = nameB;
+            document.getElementById('formOpponentAName').innerText = nameA;
+            document.getElementById('formOpponentBName').innerText = nameB;
+
+            let totalA = 0, totalB = 0;
+            if (state.match.activeCheers) {
+                state.match.activeCheers.forEach(c => {
+                    if (c.side === 'A') totalA += c.points;
+                    if (c.side === 'B') totalB += c.points;
+                });
+            }
+            document.getElementById('totalCheerPointsA').innerText = totalA;
+            document.getElementById('totalCheerPointsB').innerText = totalB;
+
+            let pctA = 50, pctB = 50;
+            if (totalA + totalB > 0) { pctA = Math.round((totalA / (totalA + totalB)) * 100); pctB = 100 - pctA; }
+            document.getElementById('ratioTextA').innerText = `${pctA}% 支持度`;
+            document.getElementById('ratioTextB').innerText = `${pctB}% 支持度`;
+            document.getElementById('ratioBarA').style.width = `${pctA}%`;
+            document.getElementById('ratioBarB').style.width = `${pctB}%`;
+
+            const classTotal = state.teams.reduce((acc, curr) => acc + curr.points, 0);
+            document.getElementById('classMilestoneValue').innerText = classTotal;
+            let progressPct = Math.min(100, (classTotal / state.milestones.target3) * 100);
+            document.getElementById('classMilestoneBar').style.width = `${progressPct}%`;
+        }
+
+        function updateFormStates() {
+            if (currentRole === 'screen' || currentRole === 'teacher') return;
+            const myTeam = state.teams.find(t => t.id === myTeamId);
+            if (!myTeam) return;
+
+            document.getElementById('myTeamLabel').innerText = `${myTeam.emoji} ${myTeam.name}`;
+            document.getElementById('formAvailablePoints').innerText = myTeam.points;
+
+            const maxAllowed = Math.floor(myTeam.points * 0.5);
+            document.getElementById('cheerPointsRange').max = maxAllowed;
+            document.getElementById('cheerPointsInput').max = maxAllowed;
+            document.getElementById('limitMax').innerText = `最多 ${maxAllowed}`;
+
+            // 動態產生特殊券選擇
+            const container = document.getElementById('ticketSelectionContainer');
+            container.innerHTML = `
+                <label class="cursor-pointer"><input type="radio" name="useTicket" value="none" checked class="peer sr-only"><div class="p-1.5 text-center bg-slate-950 border border-slate-800 peer-checked:border-slate-500 rounded text-[10px]">🚫 不使用</div></label>
+                <label class="cursor-pointer"><input type="radio" name="useTicket" value="double" ${myTeam.tickets.double<=0?'disabled':''} class="peer sr-only"><div class="p-1.5 text-center bg-slate-950 border border-slate-800 peer-checked:border-pink-500 rounded text-[10px] ${myTeam.tickets.double<=0?'opacity-30':''}">🚀雙倍(${myTeam.tickets.double})</div></label>
+                <label class="cursor-pointer"><input type="radio" name="useTicket" value="insurance" ${myTeam.tickets.insurance<=0?'disabled':''} class="peer sr-only"><div class="p-1.5 text-center bg-slate-950 border border-slate-800 peer-checked:border-sky-500 rounded text-[10px] ${myTeam.tickets.insurance<=0?'opacity-30':''}">🛡️保險(${myTeam.tickets.insurance})</div></label>
+            `;
+
+            // 產生暖心互助的下拉名單
+            const selectGiftTo = document.getElementById('selectGiftToTeam');
+            if (selectGiftTo.options.length === 0) {
+                selectGiftTo.innerHTML = '';
+                state.teams.forEach(t => {
+                    if (t.id !== myTeamId) selectGiftTo.innerHTML += `<option value="${t.id}">${t.emoji} ${t.name}</option>`;
+                });
+            }
+        }
+
+        function syncPointsInput(source) {
+            const range = document.getElementById('cheerPointsRange');
+            const numInput = document.getElementById('cheerPointsInput');
+            if (source === 'range') numInput.value = range.value;
+            else { range.value = numInput.value; }
+        }
+
+        function handleCheerSubmit(e) {
+            e.preventDefault();
+            playSound('cheer');
+            const side = document.querySelector('input[name="supportOpponent"]:checked').value;
+            const points = parseInt(document.getElementById('cheerPointsInput').value);
+            const ticket = document.querySelector('input[name="useTicket"]:checked').value;
+
+            const myTeam = state.teams.find(t => t.id === myTeamId);
+            if (points > myTeam.points || points > Math.floor(myTeam.points * 0.5)) return;
+
+            myTeam.points -= points;
+            if (ticket !== 'none') myTeam.tickets[ticket] -= 1;
+
+            if (!state.match.activeCheers) state.match.activeCheers = [];
+            state.match.activeCheers.push({ teamId: myTeamId, side, points, ticket });
+            
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            state.history.unshift(`[${time}] 📣 [${myTeam.name}] 投入 ${points} 分應援 ${side==='A'?'紅方':'藍方'}`);
+            saveStateToCloud();
+            showToast("應援成功！已即時上傳大螢幕", "success");
+        }
+
+        function handleGiftSubmit(e) {
+            e.preventDefault();
+            const toId = parseInt(document.getElementById('selectGiftToTeam').value);
+            const points = parseInt(document.getElementById('giftPointsInput').value);
+            const ticketType = document.getElementById('selectGiftTicket').value;
+
+            const fromTeam = state.teams.find(t => t.id === myTeamId);
+            const toTeam = state.teams.find(t => t.id === toId);
+
+            if (points > fromTeam.points) return;
+            if (points <= 0 && ticketType === 'none') return;
+
+            if (points > 0) { fromTeam.points -= points; toTeam.points += points; }
+            if (ticketType !== 'none') { fromTeam.tickets[ticketType] -= 1; toTeam.tickets[ticketType] += 1; }
+
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            state.history.unshift(`[${time}] 💝 暖心互助：[${fromTeam.name}] 贈送資源給 [${toTeam.name}]！`);
+            saveStateToCloud();
+            showToast("暖心贈送成功！", "success");
+        }
+
+        function renderActiveCheers() {
+            const list = document.getElementById('activeCheerList');
+            list.innerHTML = '';
+            if (!state.match.activeCheers || state.match.activeCheers.length === 0) {
+                list.innerHTML = `<p class="text-xs text-slate-500 italic">尚無小組送出應援...</p>`; return;
+            }
+            state.match.activeCheers.forEach(c => {
+                const t = state.teams.find(x => x.id === c.teamId);
+                if (t) list.innerHTML += `<div class="text-[11px] bg-slate-950 p-1 rounded flex justify-between"><span>${t.name}支持${c.side==='A'?'紅':'藍'}</span><span class="text-indigo-400 font-bold">${c.points}分</span></div>`;
+            });
+        }
+
+        function renderHistory() {
+            const log = document.getElementById('historyLog'); log.innerHTML = '';
+            state.history.forEach(h => { log.innerHTML += `<p class="pb-0.5 border-b border-slate-900">${h}</p>`; });
+        }
+
+        function switchTab(tab) {
+            if (tab === 'cheer') { document.getElementById('cheerForm').classList.remove('hidden'); document.getElementById('giftForm').classList.add('hidden'); }
+            else { document.getElementById('giftForm').classList.remove('hidden'); document.getElementById('cheerForm').classList.add('hidden'); }
+        }
+
+        // ==================== 老師專屬後台功能 ====================
+        function toggleTeacherConsole() {
+            const m = document.getElementById('teacherConsoleModal'); m.classList.toggle('hidden');
+            if (!m.classList.contains('hidden')) {
+                document.getElementById('setupOpponentA').value = state.match.opponentA.customName;
+                document.getElementById('setupOpponentB').value = state.match.opponentB.customName;
+                document.getElementById('victoryBonusPoints').value = state.match.victoryBonus;
+                document.getElementById('resolveTextA').innerText = `判定「${state.match.opponentA.customName}」獲勝`;
+                document.getElementById('resolveTextB').innerText = `判定「${state.match.opponentB.customName}」獲勝`;
+
+                const selA = document.getElementById('selectOpponentATeam');
+                const selB = document.getElementById('selectOpponentBTeam');
+                selA.innerHTML = `<option value="custom">自訂名稱</option>`;
+                selB.innerHTML = `<option value="custom">自訂名稱</option>`;
+                state.teams.forEach(t => {
+                    selA.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+                    selB.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+                });
+
+                const list = document.getElementById('teacherTeamList'); list.innerHTML = '';
+                state.teams.forEach(t => {
+                    list.innerHTML += `
+                        <div class="p-2 bg-slate-950 rounded flex justify-between items-center text-xs">
+                            <span>${t.name} (${t.points}分)</span>
+                            <div class="flex gap-1">
+                                <button onclick="teacherAddPoints(${t.id}, 100)" class="bg-slate-800 px-2 py-0.5 rounded text-yellow-400">+100</button>
+                                <button onclick="teacherAddPoints(${t.id}, -100)" class="bg-slate-800 px-2 py-0.5 rounded text-slate-400">-100</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        function handleOpponentSelect(side) {
+            const sel = document.getElementById(`selectOpponent${side}Team`).value;
+            if (sel !== 'custom') {
+                const t = state.teams.find(x => x.id === parseInt(sel));
+                document.getElementById(`setupOpponent${side}`).value = t.name;
+            }
+        }
+
+        function updateMatchSetup() {
+            state.match.opponentA.customName = document.getElementById('setupOpponentA').value;
+            state.match.opponentB.customName = document.getElementById('setupOpponentB').value;
+            state.match.victoryBonus = parseInt(document.getElementById('victoryBonusPoints').value) || 0;
+            state.match.activeCheers = [];
+            state.history.unshift(`[系統] 老師開啟了全新一輪對抗戰！`);
+            saveStateToCloud(); toggleTeacherConsole();
+        }
+
+        function teacherAddPoints(teamId, amount) {
+            const t = state.teams.find(x => x.id === teamId);
+            if (t) { t.points += amount; state.history.unshift(`[老師] 手動調整了 ${t.name} 的分數 ${amount} 分`); saveStateToCloud(); toggleTeacherConsole(); }
+        }
+
+        function resolveCurrentMatch(winnerSide) {
+            const winnerName = winnerSide === 'A' ? state.match.opponentA.customName : state.match.opponentB.customName;
+            state.history.unshift(`🏁 賽事結果：由【${winnerName}】獲勝！點數大結算開始。`);
+
+            if (state.match.activeCheers) {
+                state.match.activeCheers.forEach(c => {
+                    const team = state.teams.find(t => t.id === c.teamId);
+                    if (!team) return;
+                    if (c.side === winnerSide) {
+                        let winPoints = c.points * 2;
+                        if (c.ticket === 'double') winPoints = c.points * 3;
+                        team.points += winPoints;
+                        state.history.unshift(`✅ [${team.name}] 應援正確，獲得 +${winPoints} 分！`);
+                    } else {
+                        if (c.ticket === 'insurance') {
+                            const refund = Math.floor(c.points * 0.8); team.points += refund;
+                            state.history.unshift(`🛡️ [${team.name}] 應援失敗，觸發保險券退還 ${refund} 分。`);
+                        } else {
+                            state.history.unshift(`❌ [${team.name}] 應援失敗，損失 ${c.points} 分。`);
+                        }
+                    }
+                });
+            }
+            state.match.activeCheers = [];
+            state.triggerTrigger += 1; // 觸發大螢幕大爆炸動畫
+            saveStateToCloud(); toggleTeacherConsole();
+        }
+
+        function refundAllActiveCheers() {
+            if (state.match.activeCheers) {
+                state.match.activeCheers.forEach(c => {
+                    const team = state.teams.find(t => t.id === c.teamId);
+                    if (team) { team.points += c.points; if (c.ticket!=='none') team.tickets[c.ticket]+=1; }
+                });
+            }
+            state.match.activeCheers = [];
+            state.history.unshift(`[老師] 取消賽事，已無條件退還所有應援分數。`);
+            saveStateToCloud(); toggleTeacherConsole();
+        }
+
+        function triggerResetConfirm() { if(confirm("確定要全面清空重置雲端資料庫嗎？")) { db.ref('system_state').set(defaultState); } }
+        function showToast(txt) { const container = document.getElementById('toastContainer'); const t = document.createElement('div'); t.className = "bg-slate-950 border border-emerald-500 px-4 py-2 rounded text-xs"; t.innerText = txt; container.appendChild(t); setTimeout(() => t.remove(), 3000); }
+        function showTierRewardModal(tier) { alert(`階段 ${tier} 獎勵：${tier===1?state.milestones.reward1:tier===2?state.milestones.reward2:state.milestones.reward3}`); }
+
+        // 啟動介面配置
+        adjustInterfaceByRole();
+    </script>
+</body>
+</html>
